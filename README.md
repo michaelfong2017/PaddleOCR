@@ -73,3 +73,10 @@ python3 kie/predict_kie_token_ser_re.py \
 If you want to use a custom ocr model, you can set it through the following fields.
 * --det_model_dir: the detection inference model path
 * --rec_model_dir: the recognition inference model path
+
+# API development
+Install dependencies.
+```bash
+pip install fastapi
+pip install python-multipart
+```
