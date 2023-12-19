@@ -148,5 +148,21 @@ async def re_predict(file: UploadFile = File(...)):
 
     return {"filename": file.filename}
 
+@app.get("/list_files")
+async def list_files():
+    directory_path = 'POC data'
+    extensions = ['.png', '.jpg', '.jpeg', '.txt', '.pdf', '.docx', '.xlsx']
+    files = find_files_with_extensions(directory_path, extensions)
+    return {"files": files}
+
+def find_files_with_extensions(directory, extensions):
+    file_list = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            file_extension = os.path.splitext(file)[1].lower()
+            if file_extension in extensions:
+                file_list.append(os.path.join(root, file))
+    return file_list
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

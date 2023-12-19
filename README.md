@@ -75,8 +75,10 @@ If you want to use a custom ocr model, you can set it through the following fiel
 * --rec_model_dir: the recognition inference model path
 
 # API development
-Install dependencies.
+## Install dependencies.
 ```bash
 pip install fastapi
 pip install python-multipart
 ```
+
+## Put `POC data` in the project root directory
