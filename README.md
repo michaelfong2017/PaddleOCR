@@ -52,6 +52,7 @@ python3 kie/predict_kie_token_ser.py \
   --ser_dict_path=../train_data/XFUND/class_list_xfun.txt \
   --vis_font_path=../doc/fonts/simfang.ttf \
   --ocr_order_method="tb-yx"
+cd ..
 ```
 - The visual results and text file will be saved in directory `ppstructure/output`.
 
@@ -67,6 +68,7 @@ python3 kie/predict_kie_token_ser_re.py \
   --ser_dict_path=../train_data/XFUND/class_list_xfun.txt \
   --vis_font_path=../doc/fonts/simfang.ttf \
   --ocr_order_method="tb-yx"
+cd ..
 ```
 - The visual results and text file will be saved in directory `ppstructure/output`.
 
@@ -74,11 +76,52 @@ If you want to use a custom ocr model, you can set it through the following fiel
 * --det_model_dir: the detection inference model path
 * --rec_model_dir: the recognition inference model path
 
+## layout analysis + table recognition + layout recovery (PDF to Word)
+* Note that `--image_orientation=true` is not used because image orientation is not recommended. The reason is that the image orientation feature easily rotates the image by 180 degree incorrectly.
+
+1. Install the image direction classification dependency package paddleclas (if you do not use the image direction classification, you can skip it).
+```bash
+pip install paddleclas
+```
+
+2. Fix the error.
+```bash
+user_site_folder=$(python -c 'import site; print(site.getsitepackages()[0])')
+faiss_folder="${user_site_folder}/faiss"
+cd "${faiss_folder}"
+ln -s swigfaiss.py swigfaiss_avx2.py
+```
+
+3. cd back to the project root directory.
+
+4. Test.
+- layout analysis + table recognition + layout recovery (PDF to Word):
+```bash
+paddleocr --image_dir=ppstructure/docs/table/1.png --type=structure --recovery=true --lang='en'
+```
+- `--lang='en'` is for English image (rather than Chinese image) and is not needed in the above case.
+
+- layout analysis + table recognition:
+```bash
+paddleocr --image_dir=ppstructure/docs/table/1.png --type=structure --lang='en'
+```
+- `--lang='en'` is for English image (rather than Chinese image) and is needed in the above case, or otherwise the quality is worse.
+
 # API development
 ## Install dependencies.
 ```bash
 pip install fastapi
 pip install python-multipart
+```
+
+```bash
+sudo apt update
+sudo apt install poppler-utils
+pip install pdf2image
+
+sudo apt install libreoffice
+sudo apt install unoconv
+sudo sed -i 's|#!/usr/bin/env python3|#!/usr/bin/python3|' /usr/bin/unoconv
 ```
 
 ## Put `POC data` in the project root directory
