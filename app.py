@@ -107,8 +107,8 @@ async def ser_predict(file: UploadFile = File(...)):
     return {"filename": file.filename}
 
 
-@app.post("/re_predict")
-async def re_predict(file: UploadFile = File(...)):
+@app.post("/ser_re_predict")
+async def ser_re_predict(file: UploadFile = File(...)):
     contents = await file.read()
     # Process the file contents as needed
     args = parse_args()
@@ -117,7 +117,7 @@ async def re_predict(file: UploadFile = File(...)):
     args.re_model_dir = "./inference/re_vi_layoutxlm_xfund_infer"
     args.ser_model_dir = "./inference/ser_vi_layoutxlm_xfund_infer"
     args.use_visual_backbone = False
-    args.image_dir = "POC data/(Cleaned)5.2.2/(Cleaned)Addendum to Information Technology Service Agreement 2022 - Macau SOC(no word).pdf"
+    args.image_dir = "output/POC data/(Cleaned)5.1.1/(Cleaned)Guidelines for Incident Response and Management for Macau Branch/input_imgs/page_0009.png"
     args.ser_dict_path = "./train_data/XFUND/class_list_xfun.txt"
     args.vis_font_path = "./doc/fonts/simfang.ttf"
     args.ocr_order_method = "tb-yx"
@@ -242,6 +242,32 @@ async def process_poc():
     print(results)
     ## layout analysis + table recognition END
 
+    ## ser_re analysis BEGIN
+    pool = ThreadPool(20)
+    results = []
+    for image_file in image_files:
+        input_imgs_dir = os.path.dirname(image_file)
+        output_dir = os.path.dirname(input_imgs_dir)
+        assert os.path.exists(output_dir) and os.path.isdir(output_dir) == True
+
+        result = pool.apply_async(
+            ser_re_analysis,
+            args=(
+                image_file,
+                output_dir,
+                True,
+            ),
+        )
+
+        _ = result.get()
+        results.append(result)
+
+    pool.close()
+    pool.join()
+    results = [r.get() for r in results]
+    print(results)
+    ## ser_re analysis END
+
 @app.get("/list_files")
 async def list_files():
     directory_path = "POC data"
@@ -249,57 +275,84 @@ async def list_files():
     files = find_files_with_extensions(directory_path, extensions)
     return {"files": files}
 
-
-def layout_analysis(file: str, output_dir, is_english):
+'''
+Return:
+    None -> file format is not one of png/jpg/jpeg
+    directory path -> ser_re analysis has been run before for this image
+    infer.txt path -> ser_re analysis is successful
+'''
+def ser_re_analysis(file: str, output_dir, is_english):
     if (
-        file.lower().endswith(".pdf")
-        or file.lower().endswith(".png")
+        file.lower().endswith(".png")
         or file.lower().endswith(".jpg")
         or file.lower().endswith(".jpeg")
-        or file.lower().endswith(".docx")
-        or file.lower().endswith(".doc")
     ):
-        input_imgs_dir = os.path.join(output_dir, "input_imgs")
-        assert os.path.exists(input_imgs_dir) and os.path.isdir(input_imgs_dir) == True
+        ser_re_dir = os.path.join(output_dir, "ser_re")
+        os.makedirs(ser_re_dir, exist_ok=True)
 
+        base = os.path.basename(file)
+        filename_without_ext = os.path.splitext(base)[0]
+        img_ser_re_dir = os.path.join(ser_re_dir, filename_without_ext)
+        os.makedirs(img_ser_re_dir, exist_ok=True)
+        
+        if not len(os.listdir(img_ser_re_dir)) == 0:
+            return img_ser_re_dir
+        
+        subprocess.call(["python", "modified_predict_kie_token_ser_re.py", "--image_dir", file])
+
+        return os.path.join(img_ser_re_dir, "infer.txt")
+
+'''
+Return:
+    None -> file format is not one of png/jpg/jpeg
+    directory path -> layout analysis has been run before for this image
+    result.png path -> layout analysis is successful
+'''
+def layout_analysis(file: str, output_dir, is_english):
+    if (
+        file.lower().endswith(".png")
+        or file.lower().endswith(".jpg")
+        or file.lower().endswith(".jpeg")
+    ):
         layout_dir = os.path.join(output_dir, "layout")
         os.makedirs(layout_dir, exist_ok=True)
 
-        img_layout_dirs = []
-        for item in os.listdir(input_imgs_dir):
-            img_path = os.path.join(input_imgs_dir, item)
-            base = os.path.basename(img_path)
-            filename_without_ext = os.path.splitext(base)[0]
-            img_layout_dir = os.path.join(layout_dir, filename_without_ext)
-            os.makedirs(img_layout_dir, exist_ok=True)
-            
-            if not len(os.listdir(img_layout_dir)) == 0:
-                continue
-
-            if is_english:
-                table_engine = PPStructure(show_log=True, lang='en')
-            else:
-                table_engine = PPStructure(show_log=True)
-
-            img = cv2.imread(img_path)
-            result = table_engine(img)
-
-            save_structure_res(result, img_layout_dir, filename_without_ext)
-
-            for line in result:
-                line.pop("img")
-                print(line)
-
-            font_path = "doc/fonts/simfang.ttf"  # font provided in PaddleOCR
-            image = Image.open(img_path).convert("RGB")
-            im_show = draw_structure_result(image, result, font_path=font_path)
-            im_show = Image.fromarray(im_show)
-            im_show.save(os.path.join(img_layout_dir, "result.png"))
-
-            img_layout_dirs.append(img_layout_dir)
+        base = os.path.basename(file)
+        filename_without_ext = os.path.splitext(base)[0]
+        img_layout_dir = os.path.join(layout_dir, filename_without_ext)
+        os.makedirs(img_layout_dir, exist_ok=True)
         
-        return img_layout_dirs
+        if not len(os.listdir(img_layout_dir)) == 0:
+            return img_layout_dir
 
+        if is_english:
+            table_engine = PPStructure(show_log=True, lang='en')
+        else:
+            table_engine = PPStructure(show_log=True)
+
+        img = cv2.imread(file)
+        result = table_engine(img)
+
+        save_structure_res(result, img_layout_dir, filename_without_ext)
+
+        for line in result:
+            line.pop("img")
+            print(line)
+
+        font_path = "doc/fonts/simfang.ttf"  # font provided in PaddleOCR
+        image = Image.open(file).convert("RGB")
+        im_show = draw_structure_result(image, result, font_path=font_path)
+        im_show = Image.fromarray(im_show)
+        im_show.save(os.path.join(img_layout_dir, "result.png"))
+        
+        return os.path.join(img_layout_dir, "result.png")
+
+'''
+Return:
+    None -> file format is not one of pdf/png/jpg/jpeg/docx/doc
+    [] -> file has been converted into images before
+    list of image paths -> conversion is successful
+'''
 def save_as_input_imgs(file: str, output_dir):
     if (
         file.lower().endswith(".pdf")
