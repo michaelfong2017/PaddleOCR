@@ -295,7 +295,7 @@ def ser_re_analysis(file: str, output_dir, is_english):
         img_ser_re_dir = os.path.join(ser_re_dir, filename_without_ext)
         os.makedirs(img_ser_re_dir, exist_ok=True)
         
-        if not len(os.listdir(img_ser_re_dir)) == 0:
+        if not len(os.listdir(img_ser_re_dir)) == 0 and not non_empty_infer_txt_exists(img_ser_re_dir) or non_empty_error_txt_exists(img_ser_re_dir):
             return img_ser_re_dir
         
         subprocess.call(["python", "modified_predict_kie_token_ser_re.py", "--image_dir", file])
@@ -346,6 +346,28 @@ def layout_analysis(file: str, output_dir, is_english):
         im_show.save(os.path.join(img_layout_dir, "result.png"))
         
         return os.path.join(img_layout_dir, "result.png")
+
+def non_empty_error_txt_exists(directory_path):
+    error_txt_path = os.path.join(directory_path, "error.txt")
+
+    if not os.path.isfile(error_txt_path):
+        return False
+
+    if os.path.getsize(error_txt_path) == 0:
+        return False
+
+    return True
+
+def non_empty_infer_txt_exists(directory_path):
+    infer_txt_path = os.path.join(directory_path, "infer.txt")
+
+    if not os.path.isfile(infer_txt_path):
+        return False
+
+    if os.path.getsize(infer_txt_path) == 0:
+        return False
+
+    return True
 
 '''
 Return:
