@@ -229,6 +229,7 @@ async def process_poc():
             args=(
                 image_file,
                 output_dir,
+                True,
             ),
         )
 
@@ -249,7 +250,7 @@ async def list_files():
     return {"files": files}
 
 
-def layout_analysis(file: str, output_dir):
+def layout_analysis(file: str, output_dir, is_english):
     if (
         file.lower().endswith(".pdf")
         or file.lower().endswith(".png")
@@ -275,7 +276,10 @@ def layout_analysis(file: str, output_dir):
             if not len(os.listdir(img_layout_dir)) == 0:
                 continue
 
-            table_engine = PPStructure(show_log=True)
+            if is_english:
+                table_engine = PPStructure(show_log=True, lang='en')
+            else:
+                table_engine = PPStructure(show_log=True)
 
             img = cv2.imread(img_path)
             result = table_engine(img)
