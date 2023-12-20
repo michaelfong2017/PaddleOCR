@@ -298,7 +298,7 @@ def ser_re_analysis(file: str, output_dir, is_english):
         if not len(os.listdir(img_ser_re_dir)) == 0 and non_empty_infer_txt_exists(img_ser_re_dir) or non_empty_error_txt_exists(img_ser_re_dir):
             return img_ser_re_dir
         
-        subprocess.call(["python", "modified_predict_kie_token_ser_re.py", "--image_dir", file])
+        subprocess.call(["python", "modified_predict_kie_token_ser_re.py", "--output", img_ser_re_dir, "--image_dir", file])
 
         return os.path.join(img_ser_re_dir, "infer.txt")
 
