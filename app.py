@@ -45,6 +45,100 @@ from PIL import Image
 
 ## Import for layout analysis END
 
+## Import for generating final documents BEGIN
+import re
+import xml.etree.ElementTree as ET
+## Import for generating final documents END
+
+## Import for parsing xlsx BEGIN
+import pandas as pd
+## Import for parsing xlsx END
+
+
+@app.get("/parse_xlsx")
+async def parse_xlsx():
+    output_dir = 'output/xlsx_as_html'
+    os.makedirs(output_dir, exist_ok=True)
+    directory_path = "POC data"
+    extensions = [".xlsx"]
+    files = find_files_with_extensions(directory_path, extensions)
+    for file in files:
+        # Read the XLSX file
+        xlsx = pd.ExcelFile(file)
+
+        # Convert each sheet to HTML
+        for sheet_name in xlsx.sheet_names:
+            df = pd.read_excel(xlsx, sheet_name)
+            html = df.to_html()
+
+            # Save the HTML to a file
+            prefix_dir_to_exclude = "POC data"
+            match = re.search(r'{0}/(.*?).xlsx'.format(prefix_dir_to_exclude), file)
+            context_string = ""
+            if match:
+                words = match.group(1).split("/")
+                words = [word for word in words if word]  # Remove empty strings from the list
+                context_string = ', '.join(words)
+            else:
+                print("No match found.")
+
+            with open(os.path.join(output_dir, context_string + " - " + sheet_name + ".html"), 'w') as out:
+                out.write(html)
+
+    return {"files": files}
+
+@app.get("/generate_document")
+async def generate_document():
+    final_output_dir = 'output_document'
+
+    ## For raw documents of type pdf/png/jpg/jpeg/docx/doc BEGIN
+    directory_path = os.path.join("output", "POC data")
+    filename = "res_0.txt"
+    files = find_files_with_filename(directory_path, filename)
+    os.makedirs(final_output_dir, exist_ok=True)
+    for file in files:
+        desc = "The current document is within a context annotated by the <context> tag. This context is directly related to every resource (annotated by the <resource> tag) under the <resource_list> tag. Every resource (annotated by the <resource> tag) has a type (annotated by the <type> tag) and content (annotated by the <content> tag)."
+        desc = escape_xml_string(desc)
+        context_string = extract_context_string(file, "output/POC data")
+        context_string = escape_xml_string(context_string)
+        # print(context_string)
+        res_list = extract_res_list(file)
+        document = "<document><description>{0}</description><context>{1}</context><resource_list>{2}</resource_list></document>".format(desc, context_string, '\n'.join(res_list))
+        document = document.replace("&", "&amp;")
+        # print(document)
+
+        with open(os.path.join(final_output_dir, '{0}.xml'.format(context_string)), 'w') as f:
+            f.write(document)
+
+    all_valid = validate_xml_directory(final_output_dir)
+    print("All xml files are valid." if all_valid else "Some xml files are invalid.")
+    print("All generated xml files have been saved in ./{0}".format(final_output_dir))
+    ## For raw documents of type pdf/png/jpg/jpeg/docx/doc END
+
+    ## For raw documents of type xlsx BEGIN
+    directory_path = os.path.join("output", "xlsx_as_html")
+    extensions = [".html"]
+    files = find_files_with_extensions(directory_path, extensions)
+    for file in files:
+        table_html = ""
+        with open(file, 'r') as f:
+            table_html = "<html><body>{0}</body></html>".format(f.read())
+        
+        desc = "The current document is within a context annotated by the <context> tag. This context is directly related to the resource (annotated by the <resource> tag). The resource (annotated by the <resource> tag) has a type (annotated by the <type> tag) and content (annotated by the <content> tag)."
+        desc = escape_xml_string(desc)
+        base = os.path.basename(file)
+        filename_without_ext = os.path.splitext(base)[0]
+        context_string = filename_without_ext
+        context_string = escape_xml_string(context_string)
+        resource_xml = "<resource><type>table</type><content>{0}</content></resource>".format(escape_xml_string(table_html))
+        document = "<document><description>{0}</description><context>{1}</context>{2}</document>".format(desc, context_string, resource_xml)
+        # print(document)
+        with open(os.path.join(final_output_dir, '{0}.xml'.format(context_string)), 'w') as f:
+            f.write(document)
+    ## For raw documents of type xlsx END
+
+    return {"files": files}
+
 
 @app.post("/ser_predict")
 async def ser_predict(file: UploadFile = File(...)):
@@ -273,6 +367,9 @@ async def list_files():
     directory_path = "POC data"
     extensions = [".png", ".jpg", ".jpeg", ".txt", ".pdf", ".docx", ".doc", ".xlsx"]
     files = find_files_with_extensions(directory_path, extensions)
+    # xs = find_files_with_extensions(f"output/{directory_path}", ".xlsx")
+    # for x in xs:
+    #     shutil.copy(x, f"output/{os.path.basename(x)}")
     return {"files": files}
 
 '''
@@ -459,6 +556,82 @@ def find_files_with_extensions(directory, extensions):
             if file_extension in extensions:
                 file_list.append(os.path.join(root, file))
     return file_list
+
+def find_files_with_filename(directory, filename):
+    file_list = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file == filename:
+                file_list.append(os.path.join(root, file))
+    return file_list
+
+def extract_context_string(filepath, prefix_dir_to_exclude):
+    context_string = ""
+    # Extract the desired portion of the string
+    match = re.search(r'{0}/(.*?)/layout/(.*?page_\d+)'.format(prefix_dir_to_exclude), filepath)
+    if match:
+        words = match.group(1).split("/") + match.group(2).split("/")
+        words = [word for word in words if word]  # Remove empty strings from the list
+        context_string = ', '.join(words)
+    else:
+        print("No match found.")
+    return context_string
+
+def extract_res_list(filepath):
+    xml_list = []
+    with open(filepath) as file:
+        for line in file.readlines():
+            json_data = json.loads(line)
+            # print(json_data)
+            res_type = json_data.get('type')
+            # For 'type': 'text', 'title', 'list', 'figure', the handling is almost the same while for 'type': 'table', the handling is different
+            if res_type == 'text' or res_type == 'title' or res_type == 'list' or res_type == 'figure':
+                res_list = json_data.get('res')
+                phrase_list = []
+                for res in res_list:
+                    phrase_list.append(res.get('text'))
+                
+                if res_type == 'list':
+                    phrases = '; '.join(phrase_list)
+                else:
+                    phrases = ', '.join(phrase_list)
+
+                xml = "<resource><type>text</type><content>{0}</content></resource>".format(escape_xml_string(phrases))
+            elif res_type == 'table':
+                res = json_data.get('res')
+                xml = "<resource><type>table</type><content>{0}</content></resource>".format(escape_xml_string(res.get('html')))
+            else:
+                print("Another res type found.")
+                xml = None
+
+            if xml:
+                xml_list.append(xml)
+
+    return xml_list
+
+def escape_xml_string(str):
+    str = str.replace("&", "&amp;")
+    str = str.replace("<", "&lt;")
+    str = str.replace(">", "&gt;")
+    return str
+
+def validate_xml_directory(directory):
+    all_valid = True
+    for filename in os.listdir(directory):
+        if filename.endswith('.xml'):
+            file_path = os.path.join(directory, filename)
+            if not validate_xml_file(file_path):
+                all_valid = False
+    return all_valid
+
+def validate_xml_file(file_path):
+    try:
+        tree = ET.parse(file_path)
+        # print(f"{file_path} is valid.")
+        return True
+    except (ET.ParseError, FileNotFoundError) as e:
+        print(f"{file_path} is invalid: {str(e)}")
+        return False
 
 
 if __name__ == "__main__":
