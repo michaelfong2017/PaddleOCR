@@ -117,7 +117,6 @@ async def generate_document():
     extensions = [".html"]
     files = find_files_with_extensions(directory_path, extensions)
     for file in files:
-        table_html = ""
         with open(file, 'r') as f:
             html_string = "<html><body>{0}</body></html>".format(f.read())
             # Read HTML string into DataFrame
