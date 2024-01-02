@@ -122,6 +122,8 @@ pip install pdf2image
 sudo apt install libreoffice
 sudo apt install unoconv
 sudo sed -i 's|#!/usr/bin/env python3|#!/usr/bin/python3|' /usr/bin/unoconv
+
+pip install html5lib
 ```
 
 ## Put `POC data` in the project root directory

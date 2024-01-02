@@ -48,6 +48,7 @@ from PIL import Image
 ## Import for generating final documents BEGIN
 import re
 import xml.etree.ElementTree as ET
+from io import StringIO
 ## Import for generating final documents END
 
 ## Import for parsing xlsx BEGIN
@@ -109,10 +110,6 @@ async def generate_document():
 
         with open(os.path.join(final_output_dir, '{0}.xml'.format(context_string)), 'w') as f:
             f.write(document)
-
-    all_valid = validate_xml_directory(final_output_dir)
-    print("All xml files are valid." if all_valid else "Some xml files are invalid.")
-    print("All generated xml files have been saved in ./{0}".format(final_output_dir))
     ## For raw documents of type pdf/png/jpg/jpeg/docx/doc END
 
     ## For raw documents of type xlsx BEGIN
@@ -122,7 +119,16 @@ async def generate_document():
     for file in files:
         table_html = ""
         with open(file, 'r') as f:
-            table_html = "<html><body>{0}</body></html>".format(f.read())
+            html_string = "<html><body>{0}</body></html>".format(f.read())
+            # Read HTML string into DataFrame
+            try:
+                df_list = pd.read_html(html_string)
+                df = df_list[0]
+                # Convert DataFrame to CSV
+                csv_string = df.to_csv(index=False)
+            except:
+                print("This table is ignored because it is probably empty.")
+                continue
         
         desc = "The current document is within a context annotated by the <context> tag. This context is directly related to the resource (annotated by the <resource> tag). The resource (annotated by the <resource> tag) has a type (annotated by the <type> tag) and content (annotated by the <content> tag)."
         desc = escape_xml_string(desc)
@@ -130,11 +136,15 @@ async def generate_document():
         filename_without_ext = os.path.splitext(base)[0]
         context_string = filename_without_ext
         context_string = escape_xml_string(context_string)
-        resource_xml = "<resource><type>table</type><content>{0}</content></resource>".format(escape_xml_string(table_html))
+        resource_xml = "<resource><type>table</type><content>{0}</content></resource>".format(escape_xml_string(csv_string))
         document = "<document><description>{0}</description><context>{1}</context>{2}</document>".format(desc, context_string, resource_xml)
         # print(document)
         with open(os.path.join(final_output_dir, '{0}.xml'.format(context_string)), 'w') as f:
             f.write(document)
+
+    all_valid = validate_xml_directory(final_output_dir)
+    print("All xml files are valid." if all_valid else "Some xml files are invalid.")
+    print("All generated xml files have been saved in ./{0}".format(final_output_dir))
     ## For raw documents of type xlsx END
 
     return {"files": files}
@@ -599,7 +609,18 @@ def extract_res_list(filepath):
                 xml = "<resource><type>text</type><content>{0}</content></resource>".format(escape_xml_string(phrases))
             elif res_type == 'table':
                 res = json_data.get('res')
-                xml = "<resource><type>table</type><content>{0}</content></resource>".format(escape_xml_string(res.get('html')))
+
+                html_string = res.get('html')
+                # Read HTML string into DataFrame
+                try:
+                    df_list = pd.read_html(html_string)
+                    df = df_list[0]
+                    # Convert DataFrame to CSV
+                    csv_string = df.to_csv(index=False)
+                except:
+                    print("This table is ignored because it is probably empty.")
+                    continue
+                xml = "<resource><type>table</type><content>{0}</content></resource>".format(escape_xml_string(csv_string))
             else:
                 print("Another res type found.")
                 xml = None
